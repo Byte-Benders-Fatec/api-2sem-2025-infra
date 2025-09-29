@@ -1,0 +1,36 @@
+---
+- name: Ensure PM2 is installed globally
+  npm:
+    name: pm2
+    global: yes
+    state: present
+  become: true
+
+# tenta restartar; se falhar, seguimos para o start
+- name: PM2 restart {{ app_name }} (se existir)
+  command: pm2 restart {{ app_name }} --update-env
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  register: pm2_restart
+  ignore_errors: true  # não para o play se der "not found"
+
+- name: PM2 start {{ app_name }} (se não existir)
+  command: pm2 start {{ app_entrypoint }} --name {{ app_name }}
+  args:
+    chdir: "{{ app_dir }}"
+  become: true
+  become_user: "{{ app_user }}"
+  when: pm2_restart is failed
+
+# Configura o serviço systemd do PM2 para o app_user (não root)
+- name: PM2 startup (systemd) for app_user
+  command: pm2 startup systemd -u {{ app_user }} --hp /home/{{ app_user }}
+  become: true
+
+# Salva o estado dos processos no HOME do app_user (~/.pm2/dump.pm2)
+- name: Salva os processos do PM2
+  command: pm2 save
+  become: true
+  become_user: "{{ app_user }}"
